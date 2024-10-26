@@ -1,0 +1,18 @@
+[tool.poetry]
+name = "event-planner"
+version = "0.1.0"
+description = ""
+authors = ["Vera Kalacheva <verkalacheva@mail.ru>"]
+readme = "README.md"
+
+[tool.poetry.dependencies]
+python = "^3.10"
+django = "^5.1.2"
+djangorestframework = "^3.15.2"
+drf-yasg = "^1.21.8"
+pytest = "^8.3.3"
+
+
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"
