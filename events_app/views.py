@@ -22,8 +22,8 @@ class GetEventView(APIView):
     def get(self, request, pk):
         try:
             event = Event.objects.get(pk=pk)
-            if event.creator != request.user:
-                raise Http404("You do not have permission to access this event.")
+            if event.creator != request.user and request.user not in event.attendees.all():
+                return Response(status=status.HTTP_403_FORBIDDEN)
             return Response(EventSerializer(event).data)
         except Event.DoesNotExist:
             raise Http404("Event not found")
@@ -52,7 +52,7 @@ class DeleteEventView(APIView):
         try:
             event = Event.objects.get(pk=pk)
             if event.creator != request.user:
-                raise Http404("You do not have permission to delete this event.")
+                return Response(status=status.HTTP_403_FORBIDDEN)
             event.delete()
             return Response(status=status.HTTP_204_NO_CONTENT)
         except Event.DoesNotExist:
@@ -62,6 +62,8 @@ class AddAttendeeView(APIView):
     def post(self, request, event_id):
         try:
             event = Event.objects.get(pk=event_id)
+            if event.creator != request.user:
+                return Response(status=status.HTTP_403_FORBIDDEN)
         except Event.DoesNotExist:
             return Response(status=status.HTTP_404_NOT_FOUND)
 
@@ -72,7 +74,7 @@ class AddAttendeeView(APIView):
         try:
             user = User.objects.get(pk=user_id)
         except User.DoesNotExist:
-            raise ValidationError("User not found")
+             return Response(status=status.HTTP_404_NOT_FOUND)
 
         attendance = EventAttendance(event=event, user=user)
         attendance.save()
@@ -86,7 +88,12 @@ class RemoveAttendeeView(APIView):
             attendance = EventAttendance.objects.get(event__id=event_id, user__id=user_id)
         except EventAttendance.DoesNotExist:
             return Response(status=status.HTTP_404_NOT_FOUND)
-
+        try:
+            event = Event.objects.get(pk=event_id)
+            if event.creator != request.user:
+                return Response(status=status.HTTP_403_FORBIDDEN)
+        except Event.DoesNotExist:
+            return Response(status=status.HTTP_404_NOT_FOUND)
         attendance.delete()
         return Response(status=status.HTTP_204_NO_CONTENT)
 
@@ -102,8 +109,8 @@ class EventDetailView(APIView):
     def get(self, request, pk):
         try:
             event = Event.objects.get(pk=pk)
-            if event.creator != request.user:
-                raise Http404("You do not have permission to access this event.")
+            if event.creator != request.user and request.user not in event.attendees.all():
+                return Response(status=status.HTTP_403_FORBIDDEN)
             serializer = EventSerializer(event)
             return Response(serializer.data)
         except Event.DoesNotExist:

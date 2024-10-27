@@ -4,8 +4,9 @@ from django.utils.timezone import now
 
 class Event(models.Model):
     title = models.CharField(max_length=200)
-    description = models.TextField()
+    description = models.TextField(null=True)
     date = models.DateTimeField(default=now)
+    location = models.CharField(max_length=200, null=True)
     creator = models.ForeignKey(User, on_delete=models.CASCADE, related_name='created_events')
     attendees = models.ManyToManyField(User, through='EventAttendance')
 

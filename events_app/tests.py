@@ -31,6 +31,17 @@ class EventCRUDTests(TestCase):
             )
             self.events.append(event)
 
+    def test_create_event_not_successful(self):
+        url = reverse('create_event')
+        data = {
+            'description': 'Description of New Test Event',
+            'date': '2024-12-31 23:59:59'
+        }
+
+        response = self.client.post(url, data)
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertEqual(Event.objects.count(), 5)
+
     def test_create_event_successful(self):
         url = reverse('create_event')
         data = {
@@ -39,7 +50,7 @@ class EventCRUDTests(TestCase):
             'date': '2024-12-31 23:59:59'
         }
 
-        response = self.client.post(url, data, format='json')
+        response = self.client.post(url, data)
         self.assertEqual(response.status_code, status.HTTP_201_CREATED)
         self.assertIn('id', response.data)
         self.assertEqual(Event.objects.count(), 6)
@@ -48,15 +59,27 @@ class EventCRUDTests(TestCase):
         new_event = Event.objects.latest('id')
         self.assertEqual(new_event.creator, self.user1)
 
-    def test_get_event(self):
+    def test_get_event_successful(self):
         url = reverse('get_event', kwargs={'pk': 1})
         response = self.client.get(url)
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.assertIn('id', response.data)
         self.assertEqual(response.data['creator']['id'], self.user1.id)
 
+    def test_get_event_404(self):
+        url = reverse('get_event', kwargs={'pk': 999_999})
+        response = self.client.get(url)
+        self.assertEqual(response.status_code, status.HTTP_404_NOT_FOUND)
+
+    def test_get_event_permission_denied(self):
+        url = reverse('get_event', kwargs={'pk': 1})
+        self.client.force_authenticate(user=self.user2)
+        response = self.client.get(url)
+        self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
+
     def test_update_event_successful(self):
         event = Event.objects.create(title="Test Event", creator=self.user1)
+        self.client.force_authenticate(user=self.user1)
         url = reverse('update_event', kwargs={'pk': event.id})
         data = {'title': 'Updated Title'}
 
@@ -83,14 +106,28 @@ class EventCRUDTests(TestCase):
         response = self.client.put(url, data)
         self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
 
-    def test_delete_event(self):
-        url = reverse('delete_event', kwargs={'pk': 1})
+    def test_delete_event_not_found(self):
+        url = reverse('delete_event', kwargs={'pk': 999_999})
+        self.client.force_authenticate(user=self.user1)
+        response = self.client.delete(url)
+        self.assertEqual(response.status_code, status.HTTP_404_NOT_FOUND)
+        self.assertEqual(Event.objects.count(), 5)
 
+    def test_delete_event_permission_denied(self):
+        url = reverse('delete_event', kwargs={'pk': 1})
+        self.client.force_authenticate(user=self.user2)
+        response = self.client.delete(url)
+        self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
+        self.assertEqual(Event.objects.count(), 5)
+
+    def test_delete_event_successful(self):
+        url = reverse('delete_event', kwargs={'pk': 1})
+        self.client.force_authenticate(user=self.user1)
         response = self.client.delete(url)
         self.assertEqual(response.status_code, status.HTTP_204_NO_CONTENT)
         self.assertEqual(Event.objects.count(), 4)
 
-    def test_add_attendee(self):
+    def test_add_attendee_permission_denied(self):
         # Создаем событие для добавления участника
         event = Event.objects.create(
             title="Test Event",
@@ -101,12 +138,52 @@ class EventCRUDTests(TestCase):
 
         url = reverse('add_attendee', kwargs={'event_id': event.id})
         data = {'user_id': self.user2.id}
+        self.client.force_authenticate(user=self.user2)
+        response = self.client.post(url, data)
+        self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
+        self.assertEqual(EventAttendance.objects.filter(event__id=event.id, user__id=self.user2.id).count(), 0)
 
+    def test_add_attendee_user_not_found(self):
+        # Создаем событие для добавления участника
+        event = Event.objects.create(
+            title="Test Event",
+            description="Test Description",
+            date="2024-12-31 23:59:59",
+            creator=self.user1
+        )
+
+        url = reverse('add_attendee', kwargs={'event_id': event.id})
+        data = {'user_id': 999_999}
+        self.client.force_authenticate(user=self.user1)
+        response = self.client.post(url, data)
+        self.assertEqual(response.status_code, status.HTTP_404_NOT_FOUND)
+        self.assertEqual(EventAttendance.objects.filter(event__id=event.id, user__id=self.user2.id).count(), 0)
+
+    def test_add_attendee_successful(self):
+        # Создаем событие для добавления участника
+        event = Event.objects.create(
+            title="Test Event",
+            description="Test Description",
+            date="2024-12-31 23:59:59",
+            creator=self.user1
+        )
+
+        url = reverse('add_attendee', kwargs={'event_id': event.id})
+        data = {'user_id': self.user2.id}
+        self.client.force_authenticate(user=self.user1)
         response = self.client.post(url, data, format='json')
         self.assertEqual(response.status_code, status.HTTP_201_CREATED)
         self.assertEqual(EventAttendance.objects.filter(event__id=event.id, user__id=self.user2.id).count(), 1)
 
-    def test_remove_attendee(self):
+    def test_remove_attendee_permission_denied(self):
+        EventAttendance.objects.create(event=self.events[0], user=self.user2)
+        url = reverse('remove_attendee', kwargs={'event_id': 1, 'user_id': self.user2.id})
+        self.client.force_authenticate(user=self.user2)
+        response = self.client.delete(url)
+        self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
+        self.assertEqual(EventAttendance.objects.filter(event__id=1, user__id=self.user2.id).count(), 1)
+
+    def test_remove_attendee_successful(self):
         EventAttendance.objects.create(event=self.events[0], user=self.user2)
         url = reverse('remove_attendee', kwargs={'event_id': 1, 'user_id': self.user2.id})
         response = self.client.delete(url)
