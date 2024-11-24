@@ -20,4 +20,5 @@ from django.conf.urls.static import static
 
 urlpatterns = [
     path('events/', include('events_app.urls')),
+    path('event_reminders/', include('event_reminders.urls')),
 ] + static(settings.STATIC_URL, document_root=settings.STATIC_ROOT)
